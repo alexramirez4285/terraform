@@ -2,10 +2,10 @@ provider "aws" {
 	region = "us-east-2"
 }
 
-resource "aws_instance" "example" {
-	ami		= "ami-0fb653ca2d3203ac1"
+resource "aws_launch_configuration" "example" {
+	image_id		= "ami-0fb653ca2d3203ac1"
 	instance_type	= "t2.micro"
-	vpc_security_group_ids = [aws_security_group.instance.id]
+	security_groups = [aws_security_group.instance.id]
 
 	user_data = <<-EOF
 				#!/bin/bash
@@ -17,6 +17,27 @@ resource "aws_instance" "example" {
 
 	tags = {
 		Name = "terraform-example"
+	}
+	 # Required when using a launch configuration with a auto scaling group.
+	 lifecycle {
+	 	create_before_destroy = true
+	 }
+}
+
+resource "aws_autoscaling_group" "example" {
+	launch_configuration = aws_launch_configuration.example.name
+	vpc_zone_indentifier = data.aws_subnets.default.ids
+
+	target_group_arns = [aws_lb_target_group.asg.arn]
+	health_check_type = "ELB"
+
+	min_size = 2
+	max_size = 10
+
+	tag {
+		key					= "Name"
+		value				= "terraform-asg-example"
+		propagate_at_launch = "True"
 	}
 }
 
@@ -31,13 +52,102 @@ resource "aws_security_group" "instance" {
 	}
 }
 
+resource "aws_security_group" "alb" {
+	name = "terraform-example-alb"
+
+	# Allow inbound HTTP requests
+	ingress {
+		from_port = 80
+		to_port   = 80
+		protocol  = "tcp"
+		cidr_blocks = ["0.0.0./0"]
+	}
+}
+
+resources "aws_lb_target_group" "asg" {
+	name 		= "terraform-asg-example"
+	port 		= var.server_port
+	protocol 	= "HTTP"
+	vpc_id  	= data.aws_vpc.default.id
+
+	health_check {
+		path 				= "/"
+		protcol 			= "HTTP"
+		matcher 			= "200"
+		internval 			= 15
+		timeout 			= 3
+		healthy_threshold 	= 2
+		unhealthy_threshold = 2
+	}
+}
+
+resource "aws_lb" "example" {
+	name				= "terraform-asg-example"
+	load_balancer_type 	= "application"
+	subnets 			= data.aws_subnets.default.ids
+	security_groups		= [aws_security_group.alb.id]
+}
+
+resource "aws_lb_listener" "http" {
+	load_balancer_arn 	= aws_lb.example.arn
+	port 				= 80
+	protocol			= "HTTP"
+
+
+	# By default, return a simple 404 page
+	default_action {
+		type = "fixed-response"
+
+		fixed_response {
+			content_type = "text/plain"
+			message_body = "404: page not found"
+			status code  = 404
+		}
+	}
+}
+
+resource "aws_lb_listener_rule" "asg" {
+	listener_arn = aws_lb_listener.http.arn
+	priority = 100
+
+	condition {
+		path_patterns {
+			values = [*]
+		}
+	}
+
+	action {
+		type = "forward"
+		target_grou_arn = aws_lb_target_group.asg.arn
+	}
+}
+
 variable "server_port" {
 	description = "The port the server will use for HTTP requests"
 	type 		= number
 	default		= 8080
 }
 
-output "public_ip" {
-	value = aws_instance.example.public_ip
-	description = "The public IP address of the web server"
+output "alb_dns_name" {
+	value = aws_lb.example.dns_name
+	description = "The domain name of the load balancer"
 }
+
+# Data sources represent a piece of read-only information that is fetched
+# from the provider (aws) everytime you run Terraform. Just a way to query
+# the provider's APIs for data to make that data available to the rest of 
+# your Terraform code
+
+# Data for my Default VPC (isolated area of your AWS account that has its
+# own virtual network and IP address space)
+data "aws_vpc" "default" {
+	default = true
+}
+
+data "aws_subnets" "default" {
+	filter {
+		name	= "vpc-id"
+		values	= [data.aws_vpc.default.id]
+	}
+}
+
