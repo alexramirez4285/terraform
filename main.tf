@@ -15,9 +15,6 @@ resource "aws_launch_configuration" "example" {
 
 	user_data_replace_on_change = true
 
-	tags = {
-		Name = "terraform-example"
-	}
 	 # Required when using a launch configuration with a auto scaling group.
 	 lifecycle {
 	 	create_before_destroy = true
@@ -62,6 +59,14 @@ resource "aws_security_group" "alb" {
 		protocol  = "tcp"
 		cidr_blocks = ["0.0.0./0"]
 	}
+
+    # Allow all outbound requests
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
 }
 
 resources "aws_lb_target_group" "asg" {
@@ -101,7 +106,7 @@ resource "aws_lb_listener" "http" {
 		fixed_response {
 			content_type = "text/plain"
 			message_body = "404: page not found"
-			status code  = 404
+			status_code  = 404
 		}
 	}
 }
@@ -111,14 +116,14 @@ resource "aws_lb_listener_rule" "asg" {
 	priority = 100
 
 	condition {
-		path_patterns {
+		path_pattern {
 			values = [*]
 		}
 	}
 
 	action {
 		type = "forward"
-		target_grou_arn = aws_lb_target_group.asg.arn
+		target_group_arn = aws_lb_target_group.asg.arn
 	}
 }
 
