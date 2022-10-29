@@ -13,8 +13,6 @@ resource "aws_launch_configuration" "example" {
 				nohup busybox httpd -f -p ${var.server_port} &
 				EOF
 
-	user_data_replace_on_change = true
-
 	 # Required when using a launch configuration with a auto scaling group.
 	 lifecycle {
 	 	create_before_destroy = true
@@ -57,7 +55,7 @@ resource "aws_security_group" "alb" {
 		from_port = 80
 		to_port   = 80
 		protocol  = "tcp"
-		cidr_blocks = ["0.0.0./0"]
+		cidr_blocks = ["0.0.0.0/0"]
 	}
 
     # Allow all outbound requests
@@ -77,9 +75,9 @@ resource "aws_lb_target_group" "asg" {
 
 	health_check {
 		path 				= "/"
-		protcol 			= "HTTP"
+		protocol 			= "HTTP"
 		matcher 			= "200"
-		internval 			= 15
+		interval 			= 15
 		timeout 			= 3
 		healthy_threshold 	= 2
 		unhealthy_threshold = 2
