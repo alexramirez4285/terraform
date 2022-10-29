@@ -69,7 +69,7 @@ resource "aws_security_group" "alb" {
     }
 }
 
-resources "aws_lb_target_group" "asg" {
+resource "aws_lb_target_group" "asg" {
 	name 		= "terraform-asg-example"
 	port 		= var.server_port
 	protocol 	= "HTTP"
@@ -117,7 +117,7 @@ resource "aws_lb_listener_rule" "asg" {
 
 	condition {
 		path_pattern {
-			values = [*]
+			values = ["*"]
 		}
 	}
 
